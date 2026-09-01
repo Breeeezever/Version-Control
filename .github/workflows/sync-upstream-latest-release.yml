@@ -38,8 +38,6 @@ jobs:
           body="$(jq -r '(.body // "")' <<<"${release_json}")"
           echo "Latest upstream release: ${tag}"
 
-          # Create a lightweight tag in the target without pushing upstream commits.
-          # This avoids requiring the workflow-token to modify workflow files.
           upstream_ref="$(gh api "repos/${UPSTREAM_REPO}/git/ref/tags/${tag}")"
           object_sha="$(jq -r '.object.sha' <<<"${upstream_ref}")"
           object_type="$(jq -r '.object.type' <<<"${upstream_ref}")"
@@ -49,13 +47,9 @@ jobs:
             commit_sha="${object_sha}"
           fi
 
+          target_tag_exists=true
           if ! gh api "repos/${TARGET_REPO}/git/ref/tags/${tag}" >/dev/null 2>&1; then
-            gh api --method POST "repos/${TARGET_REPO}/git/refs" \
-              -f "ref=refs/tags/${tag}" \
-              -f "sha=${commit_sha}" >/dev/null
-            echo "Created target tag ${tag}."
-          else
-            echo "Tag ${tag} already exists in target."
+            target_tag_exists=false
           fi
 
           tmp="$(mktemp -d)"
@@ -91,6 +85,9 @@ jobs:
               --title "${title}"
               --notes "${body}"
             )
+            if [[ "${target_tag_exists}" == false ]]; then
+              args+=( --target "${commit_sha}" )
+            fi
             if (( ${#assets[@]} > 0 )); then
               args+=( "${assets[@]}" )
             fi
